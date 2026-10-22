@@ -87,7 +87,8 @@ def webhook(secret):
         return "Forbidden", 403
 
     update = request.get_json(silent=True) or {}
-    message = update.get("message") or {}
+logging.info("Telegram update keys: %s", list(update.keys()))
+message = update.get("message") or {}
     chat_id = (message.get("chat") or {}).get("id")
     text = (message.get("text") or "").strip()
 
