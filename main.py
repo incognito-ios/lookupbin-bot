@@ -105,7 +105,7 @@ def webhook(secret):
     if command == "/start":
         reply(
             chat_id,
-            "💗 Welcome to Lookupbin!\n\n"
+            "🤓 Welcome to Lookupbin!\n\n"
             "Your simple BIN / IIN lookup bot.\n\n"
             "🔎 Look up publicly available card issuer details.\n\n"
             "📌 How to use:\n"
@@ -133,7 +133,7 @@ def webhook(secret):
     elif command == "/about":
         reply(
             chat_id,
-            "💗 ABOUT LOOKUPBIN\n"
+            "🧐 ABOUT LOOKUPBIN\n"
             "━━━━━━━━━━━━━━━━━━\n\n"
             "Lookupbin provides public BIN / IIN issuer information.\n\n"
             "Results may be incomplete or outdated.\n\n"
