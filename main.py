@@ -1,10 +1,12 @@
 
 import os
 import re
+import logging
 import requests
 from flask import Flask, request
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
@@ -12,35 +14,65 @@ API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 
 def reply(chat_id, text):
-    requests.post(
-        f"{API}/sendMessage",
-        json={"chat_id": chat_id, "text": text},
-        timeout=15,
-    ).raise_for_status()
+    try:
+        response = requests.post(
+            f"{API}/sendMessage",
+            json={"chat_id": chat_id, "text": text},
+            timeout=15,
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        logging.exception("Could not send Telegram message")
 
 
 def lookup(prefix):
-    r = requests.get(
-        f"https://lookup.binlist.net/{prefix}",
-        headers={"Accept-Version": "3"},
-        timeout=15,
-    )
-    if r.status_code == 404:
-        return "No issuer information found."
-    if r.status_code == 429:
-        return "Lookup limit reached. Try again later."
-    r.raise_for_status()
-    data = r.json()
+    try:
+        response = requests.get(
+            f"https://lookup.binlist.net/{prefix}",
+            headers={"Accept-Version": "3"},
+            timeout=10,
+        )
+
+        if response.status_code == 404:
+            return "❌ No issuer information found for that BIN/IIN."
+
+        if response.status_code == 429:
+            return "⏳ Too many lookups. Please try again later."
+
+        response.raise_for_status()
+        data = response.json()
+
+    except requests.Timeout:
+        return "⏳ The lookup took too long. Please try again."
+    except requests.RequestException:
+        return "⚠️ The lookup service is temporarily unavailable."
+    except ValueError:
+        return "⚠️ The lookup service returned an unreadable response."
+
     bank = data.get("bank") or {}
     country = data.get("country") or {}
+
+    scheme = data.get("scheme") or "Unknown"
+    brand = data.get("brand") or "Unknown"
+    card_type = data.get("type") or "Unknown"
+    issuer = bank.get("name") or "Unknown"
+    country_name = country.get("name") or "Unknown"
+    country_code = country.get("alpha2") or ""
+
+    if country_code:
+        country_name = f"{country_name} ({country_code})"
+
     return (
-        "BIN / IIN Lookup\n\n"
-        f"Network: {data.get('scheme') or 'Unknown'}\n"
-        f"Brand: {data.get('brand') or 'Unknown'}\n"
-        f"Type: {data.get('type') or 'Unknown'}\n"
-        f"Issuer: {bank.get('name') or 'Unknown'}\n"
-        f"Country: {country.get('name') or 'Unknown'}\n\n"
-        "Public information only; results may be incomplete."
+        "💳 BIN / IIN LOOKUP\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"🌐 Network: {scheme.upper()}\n"
+        f"🏷️ Brand: {brand}\n"
+        f"💰 Card type: {card_type.title()}\n"
+        f"🏦 Issuer: {issuer}\n"
+        f"🌍 Country: {country_name}\n\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "ℹ️ Public issuer information only.\n"
+        "Results may be incomplete or outdated."
     )
 
 
@@ -64,23 +96,53 @@ def webhook(secret):
 
     command = text.split()[0].split("@")[0].lower()
 
-    if command in ("/start", "/help"):
-        reply(chat_id,
-              "Welcome to Lookupbin!\n\n"
-              "Use /bin followed by 6–8 digits.\n"
-              "Example: /bin 45717360\n\n"
-              "Never send a full card number.")
+    if command == "/start":
+        reply(
+            chat_id,
+            "💗 Welcome to Lookupbin!\n\n"
+            "Your simple BIN / IIN lookup bot.\n\n"
+            "🔎 Check publicly available card issuer details.\n\n"
+            "📌 How to use:\n"
+            "Send /bin followed by 6–8 digits.\n\n"
+            "Example:\n"
+            "/bin 457173\n\n"
+            "Type /help to see the instructions.\n\n"
+            "🔒 Never send a full card number, "
+            "expiration date, or CVV."
+        )
+
+    elif command == "/help":
+        reply(
+            chat_id,
+            "📖 LOOKUPBIN HELP\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            "🔎 Lookup command:\n"
+            "/bin 457173\n\n"
+            "Enter only 6–8 digits after /bin.\n\n"
+            "✅ Shows available network, brand, "
+            "card type, issuer, and country details.\n\n"
+            "⚠️ Information may be incomplete. "
+            "This bot does not verify balances, "
+            "card validity, or transactions.\n\n"
+            "🔒 Never enter a full card number or CVV."
+        )
 
     elif command == "/bin":
         parts = text.split()
+
         if len(parts) != 2 or not re.fullmatch(r"\d{6,8}", parts[1]):
-            reply(chat_id, "Usage: /bin followed by 6–8 digits only.")
+            reply(
+                chat_id,
+                "⚠️ Incorrect format.\n\n"
+                "Use /bin followed by 6–8 digits.\n"
+                "Example: /bin 457173\n\n"
+                "Never enter a full card number."
+            )
         else:
-            try:
-                reply(chat_id, lookup(parts[1]))
-            except requests.RequestException:
-                reply(chat_id, "Lookup service unavailable. Try again later.")
+            result = lookup(parts[1])
+            reply(chat_id, result)
+
     else:
-        reply(chat_id, "Type /help for instructions.")
+        reply(chat_id, "I don't recognize that command. Type /help.")
 
     return "OK", 200
