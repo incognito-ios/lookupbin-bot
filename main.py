@@ -127,6 +127,21 @@ def webhook(secret):
             "🔒 Never enter a full card number or CVV."
         )
 
+    
+    elif command == "/about":
+        reply(
+            chat_id,
+            "💗 ABOUT LOOKUPBIN\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            "🔎 Lookupbin provides public BIN / IIN "
+            "issuer information.\n\n"
+            "📋 Results may include the network, "
+            "brand, card type, issuing bank, and country.\n\n"
+            "⚠️ Information may be incomplete or outdated. "
+            "This bot does not verify card validity, "
+            "balances, or transactions.\n\n"
+            "🔒 Never send a full card number or CVV."
+        )
     elif command == "/bin":
         parts = text.split()
 
