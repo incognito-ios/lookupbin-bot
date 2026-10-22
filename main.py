@@ -34,20 +34,20 @@ def lookup(prefix):
         )
 
         if response.status_code == 404:
-            return "❌ No issuer information found for that BIN/IIN."
+            return "No issuer information found for that BIN/IIN."
 
         if response.status_code == 429:
-            return "⏳ Too many lookups. Please try again later."
+            return "Too many lookups. Please try again later."
 
         response.raise_for_status()
         data = response.json()
 
     except requests.Timeout:
-        return "⏳ The lookup took too long. Please try again."
+        return "The lookup took too long. Please try again."
     except requests.RequestException:
-        return "⚠️ The lookup service is temporarily unavailable."
+        return "The lookup service is temporarily unavailable."
     except ValueError:
-        return "⚠️ The lookup service returned an unreadable response."
+        return "The lookup service returned an unreadable response."
 
     bank = data.get("bank") or {}
     country = data.get("country") or {}
@@ -86,32 +86,33 @@ def webhook(secret):
     if secret != WEBHOOK_SECRET:
         return "Forbidden", 403
 
-    
     update = request.get_json(silent=True) or {}
     logging.info("Telegram update keys: %s", list(update.keys()))
-    logging.info("Telegram message chat type: %s", (update.get("message") or {}).get("chat", {}).get("type"))
-    message = update.get("message") or {}
-    chat_id = (message.get("chat") or {}).get("id")
+
+    message = update.get("message") or update.get("channel_post") or {}
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
     text = (message.get("text") or "").strip()
+
+    logging.info("Telegram chat type: %s", chat.get("type"))
 
     if not chat_id or not text:
         return "OK", 200
 
-    command = text.split()[0].split("@")[0].lower()
+    command_parts = text.split()
+    command = command_parts[0].split("@")[0].lower()
 
     if command == "/start":
         reply(
             chat_id,
             "💗 Welcome to Lookupbin!\n\n"
             "Your simple BIN / IIN lookup bot.\n\n"
-            "🔎 Check publicly available card issuer details.\n\n"
+            "🔎 Look up publicly available card issuer details.\n\n"
             "📌 How to use:\n"
             "Send /bin followed by 6–8 digits.\n\n"
-            "Example:\n"
-            "/bin 457173\n\n"
-            "Type /help to see the instructions.\n\n"
-            "🔒 Never send a full card number, "
-            "expiration date, or CVV."
+            "Example: /bin 457173\n\n"
+            "Type /help for instructions.\n\n"
+            "🔒 Never send a full card number, expiration date, or CVV."
         )
 
     elif command == "/help":
@@ -122,33 +123,28 @@ def webhook(secret):
             "🔎 Lookup command:\n"
             "/bin 457173\n\n"
             "Enter only 6–8 digits after /bin.\n\n"
-            "✅ Shows available network, brand, "
-            "card type, issuer, and country details.\n\n"
-            "⚠️ Information may be incomplete. "
-            "This bot does not verify balances, "
-            "card validity, or transactions.\n\n"
+            "Results may include network, brand, card type, "
+            "issuer, and country.\n\n"
+            "This bot does not verify card validity, balances, "
+            "or transactions.\n\n"
             "🔒 Never enter a full card number or CVV."
         )
 
-    
     elif command == "/about":
         reply(
             chat_id,
             "💗 ABOUT LOOKUPBIN\n"
             "━━━━━━━━━━━━━━━━━━\n\n"
-            "🔎 Lookupbin provides public BIN / IIN "
-            "issuer information.\n\n"
-            "📋 Results may include the network, "
-            "brand, card type, issuing bank, and country.\n\n"
-            "⚠️ Information may be incomplete or outdated. "
-            "This bot does not verify card validity, "
-            "balances, or transactions.\n\n"
-            "🔒 Never send a full card number or CVV."
+            "Lookupbin provides public BIN / IIN issuer information.\n\n"
+            "Results may be incomplete or outdated.\n\n"
+            "This bot does not verify card validity, balances, "
+            "or transactions."
         )
-    elif command == "/bin":
-        parts = text.split()
 
-        if len(parts) != 2 or not re.fullmatch(r"\d{6,8}", parts[1]):
+    elif command == "/bin":
+        if len(command_parts) != 2 or not re.fullmatch(
+            r"\d{6,8}", command_parts[1]
+        ):
             reply(
                 chat_id,
                 "⚠️ Incorrect format.\n\n"
@@ -157,7 +153,7 @@ def webhook(secret):
                 "Never enter a full card number."
             )
         else:
-            result = lookup(parts[1])
+            result = lookup(command_parts[1])
             reply(chat_id, result)
 
     else:
